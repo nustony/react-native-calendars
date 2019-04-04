@@ -1,23 +1,34 @@
-import React, {Component} from 'react';
+import React, { Component } from 'react';
 import {
   Text,
   View,
   Dimensions,
   Animated,
   ViewPropTypes,
+  ScrollView,
+  StyleSheet,
+  TouchableWithoutFeedback,
+  TouchableOpacity
 } from 'react-native';
 import PropTypes from 'prop-types';
 import XDate from 'xdate';
 
-import {parseDate, xdateToData} from '../interface';
+import { parseDate, xdateToData } from '../interface';
 import dateutils from '../dateutils';
 import CalendarList from '../calendar-list';
 import ReservationsList from './reservation-list';
 import styleConstructor from './style';
 import { VelocityTracker } from '../input';
+const { width, height } = Dimensions.get("window")
 
 const HEADER_HEIGHT = 104;
 const KNOB_HEIGHT = 24;
+
+const TOP_MARGIN_AT_ZERO = 11
+const BOTTOM_MARGIN = 4
+const DATE_HEIGHT = 115
+const HOUR_IN_A_DAY = 24
+const DATE_FORMAT = 'YYYY-MM-DD'
 
 //Fallback when RN version is < 0.44
 const viewPropTypes = ViewPropTypes || View.propTypes;
@@ -93,12 +104,14 @@ export default class AgendaView extends Component {
 
   constructor(props) {
     super(props);
+    this.allHours = []
     this.styles = styleConstructor(props.theme);
     const windowSize = Dimensions.get('window');
     this.viewHeight = windowSize.height;
     this.viewWidth = windowSize.width;
     this.scrollTimeout = undefined;
     this.headerState = 'idle';
+    this.topMostPosition = 0;
     this.state = {
       scrollY: new Animated.Value(0),
       calendarIsReady: false,
@@ -116,7 +129,7 @@ export default class AgendaView extends Component {
     this.onSnapAfterDrag = this.onSnapAfterDrag.bind(this);
     this.generateMarkings = this.generateMarkings.bind(this);
     this.knobTracker = new VelocityTracker();
-    this.state.scrollY.addListener(({value}) => this.knobTracker.add(value));
+    this.state.scrollY.addListener(({ value }) => this.knobTracker.add(value));
   }
 
   calendarOffset() {
@@ -128,7 +141,7 @@ export default class AgendaView extends Component {
   }
 
   setScrollPadPosition(y, animated) {
-    this.scrollPad._component.scrollTo({x: 0, y, animated});
+    this.scrollPad._component.scrollTo({ x: 0, y, animated });
   }
 
   onScrollPadLayout() {
@@ -137,7 +150,7 @@ export default class AgendaView extends Component {
     // scroll position actually changes (it would stay at 0, when scrolled to the top).
     this.setScrollPadPosition(this.initialScrollPadPosition(), false);
     // delay rendering calendar in full height because otherwise it still flickers sometimes
-    setTimeout(() => this.setState({calendarIsReady: true}), 0);
+    setTimeout(() => this.setState({ calendarIsReady: true }), 0);
   }
 
   onLayout(event) {
@@ -149,13 +162,13 @@ export default class AgendaView extends Component {
   onTouchStart() {
     this.headerState = 'touched';
     if (this.knob) {
-      this.knob.setNativeProps({style: { opacity: 0.5 }});
+      this.knob.setNativeProps({ style: { opacity: 0.5 } });
     }
   }
 
   onTouchEnd() {
     if (this.knob) {
-      this.knob.setNativeProps({style: { opacity: 1 }});
+      this.knob.setNativeProps({ style: { opacity: 1 } });
     }
 
     if (this.headerState === 'touched') {
@@ -287,7 +300,7 @@ export default class AgendaView extends Component {
         renderEmptyData={this.props.renderEmptyData}
         topDay={this.state.topDay}
         onDayChange={this.onDayChange.bind(this)}
-        onScroll={() => {}}
+        onScroll={() => { }}
         ref={(c) => this.list = c}
         theme={this.props.theme}
       />
@@ -311,14 +324,31 @@ export default class AgendaView extends Component {
     let markings = this.props.markedDates;
     if (!markings) {
       markings = {};
-      Object.keys(this.props.items  || {}).forEach(key => {
+      Object.keys(this.props.items || {}).forEach(key => {
         if (this.props.items[key] && this.props.items[key].length) {
-          markings[key] = {marked: true};
+          markings[key] = { marked: true };
         }
       });
     }
     const key = this.state.selectedDay.toString('yyyy-MM-dd');
-    return {...markings, [key]: {...(markings[key] || {}), ...{selected: true}}};
+    return { ...markings, [key]: { ...(markings[key] || {}), ...{ selected: true } } };
+  }
+
+  shouldComponentUpdate(nextProps, nextState) {
+    if (nextProps.reminders.length === this.props.reminders.length) {
+      for (var i = 0; i < nextProps.reminders.length; i++) {
+        if (nextProps.reminders[i].time !== this.props.reminders[i].time || nextProps.reminders[i].items[0].id !== this.props.reminders[i].items[0].id) {
+          return true
+        }
+      }
+      return false
+    } else {
+      return true
+    }
+  }
+
+  resetTopMostPosition() {
+    this.topMostPosition = 0
   }
 
   render() {
@@ -330,11 +360,13 @@ export default class AgendaView extends Component {
         outputRange: [0, 1],
         extrapolate: 'clamp',
       }),
-      transform: [{ translateY: this.state.scrollY.interpolate({
-        inputRange: [Math.max(0, agendaHeight - HEADER_HEIGHT), agendaHeight],
-        outputRange: [-HEADER_HEIGHT, 0],
-        extrapolate: 'clamp',
-      })}]
+      transform: [{
+        translateY: this.state.scrollY.interpolate({
+          inputRange: [Math.max(0, agendaHeight - HEADER_HEIGHT), agendaHeight],
+          outputRange: [-HEADER_HEIGHT, 0],
+          extrapolate: 'clamp',
+        })
+      }]
     }];
 
     const headerTranslate = this.state.scrollY.interpolate({
@@ -345,24 +377,24 @@ export default class AgendaView extends Component {
 
     const contentTranslate = this.state.scrollY.interpolate({
       inputRange: [0, agendaHeight],
-      outputRange: [0, agendaHeight/2],
+      outputRange: [0, agendaHeight / 2],
       extrapolate: 'clamp',
     });
 
     const headerStyle = [
       this.styles.header,
-      { bottom: agendaHeight, transform: [{ translateY: headerTranslate }] },
+      { bottom: agendaHeight, transform: [{ translateY: headerTranslate }], backgroundColor: 'red' },
     ];
 
     if (!this.state.calendarIsReady) {
       // limit header height until everything is setup for calendar dragging
-      headerStyle.push({height: 0});
+      headerStyle.push({ height: 0 });
       // fill header with appStyle.calendarBackground background to reduce flickering
-      weekdaysStyle.push({height: HEADER_HEIGHT});
+      weekdaysStyle.push({ height: HEADER_HEIGHT });
     }
 
     const shouldAllowDragging = !this.props.hideKnob && !this.state.calendarScrollable;
-    const scrollPadPosition = (shouldAllowDragging ? HEADER_HEIGHT  : 0) - KNOB_HEIGHT;
+    const scrollPadPosition = (shouldAllowDragging ? HEADER_HEIGHT : 0) - KNOB_HEIGHT;
 
     const scrollPadStyle = {
       position: 'absolute',
@@ -372,10 +404,10 @@ export default class AgendaView extends Component {
       left: (this.viewWidth - 80) / 2,
     };
 
-    let knob = (<View style={this.styles.knobContainer}/>);
+    let knob = (<View style={this.styles.knobContainer} />);
 
     if (!this.props.hideKnob) {
-      const knobView = this.props.renderKnob ? this.props.renderKnob() : (<View style={this.styles.knob}/>);
+      const knobView = this.props.renderKnob ? this.props.renderKnob() : (<View style={this.styles.knob} />);
       knob = this.state.calendarScrollable ? null : (
         <View style={this.styles.knobContainer}>
           <View ref={(c) => this.knob = c}>{knobView}</View>
@@ -384,12 +416,93 @@ export default class AgendaView extends Component {
     }
 
     return (
-      <View onLayout={this.onLayout} style={[this.props.style, {flex: 1, overflow: 'hidden'}]}>
-        <View style={this.styles.reservations}>
-          {this.renderReservations()}
-        </View>
+      <View onLayout={this.onLayout} style={[this.props.style, { flex: 1, overflow: 'hidden' }]}>
+        <ScrollView
+          style={{ marginTop: 104, backgroundColor: '#f4f4f4', flex: 1, paddingBottom: 101 }}
+          refreshControl={this.props.refreshControl}
+          ref={ref => this.listRef = ref}
+        >
+          <View
+            onLayout={this.props.onListLayout}
+          >
+            {this.props.allHours}
+            {
+              true &&
+              this.props.reminders.map((reminder, index) => {
+                //if reminder on the period of time has only one task => display normal
+                var hourStart = this.props.moment(reminder.items[0].startFrom).hours();
+                var hourFinish = this.props.moment(reminder.items[0].startTo).hours();
+                var minStart = this.props.moment(reminder.items[0].startFrom).minutes();
+                var minFinish = this.props.moment(reminder.items[0].startTo).minutes();
+
+                let formatFrom = this.props.moment(reminder.items[0].startFrom).year() + '-' + (this.props.moment(reminder.items[0].startFrom).month() + 1) + '-' + this.props.moment(reminder.items[0].startFrom).date()
+                let formatTo = this.props.moment(reminder.items[0].startTo).year() + '-' + (this.props.moment(reminder.items[0].startTo).month() + 1) + '-' + this.props.moment(reminder.items[0].startTo).date()
+                let formatSelected = this.props.selectedDay["year"] + '-' + this.props.selectedDay["month"] + '-' + this.props.selectedDay["day"]
+                var isStartBeforeSelectedDay = this.props.moment(formatFrom, DATE_FORMAT).isBefore(this.props.moment(formatSelected, DATE_FORMAT), 'day')
+                var isEndAfterSelectedDay = this.props.moment(formatTo, DATE_FORMAT).isAfter(this.props.moment(formatSelected, DATE_FORMAT), 'day')
+
+                var time = (hourStart > 12 ? hourStart - 12 : hourStart) + ":" + (minStart > 9 ? minStart : ("0" + minStart)) + (hourStart >= 12 ? this.props.strings('pm') : this.props.strings('am'))
+                  + " - " +
+                  (hourFinish > 12 ? hourFinish - 12 : hourFinish) + ":" + (minFinish > 9 ? minFinish : ("0" + minFinish)) + (hourFinish > 12 ? this.props.strings('pm') : this.props.strings('am'));
+                var deltaTime = (hourFinish + minFinish / 60) - (isStartBeforeSelectedDay ? 0 : (hourStart + minStart / 60));
+                var marginLeft = width * 0.15 + index * 25;
+                var marginTop = isStartBeforeSelectedDay ? TOP_MARGIN_AT_ZERO : (hourStart + minStart / 60) * DATE_HEIGHT + TOP_MARGIN_AT_ZERO
+                if (marginTop < this.topMostPosition || this.topMostPosition === 0) {
+                  this.topMostPosition = marginTop
+                  this.props.updateTopMostPosition(marginTop)
+                }
+                if (isEndAfterSelectedDay) {
+                  var height = HOUR_IN_A_DAY * DATE_HEIGHT - marginTop + TOP_MARGIN_AT_ZERO - BOTTOM_MARGIN
+                } else {
+                  var height = DATE_HEIGHT * deltaTime - BOTTOM_MARGIN
+                }
+
+                if (reminder.items.length <= 1) {
+                  if (deltaTime < 1) {
+                    return (
+                      <TouchableWithoutFeedback key={index} onLayout={this.props.onCardViewLayout}>
+                        <TouchableOpacity onPress={() => this.props.onPressJob(reminder.items[0])} style={[styles.containerItemInfoJob, { top: marginTop },
+                        { left: marginLeft }, { height: height }]}
+                          key={reminder.items[0].id}>
+                          <Text style={[styles.title, styles.textBold]} numberOfLines={1}>{time}</Text>
+                          <Text style={[styles.title, styles.textMedium]} numberOfLines={1}>{reminder.items[0].title + '...'}</Text>
+                        </TouchableOpacity>
+                      </TouchableWithoutFeedback>
+                    )
+                  } else {
+                    return (
+                      <TouchableWithoutFeedback key={index} onLayout={this.props.onCardViewLayout}>
+                        <TouchableOpacity onPress={() => this.props.onPressJob(reminder.items[0])} style={[styles.containerItemInfoJob, { top: marginTop },
+                        { left: marginLeft }, { height: height }]}
+                          key={reminder.items[0].id}>
+                          <Text style={[styles.title, styles.textBold]} numberOfLines={1}>{time}</Text>
+                          <Text style={[styles.title, styles.textMedium]} numberOfLines={1}>{reminder.items[0].title}</Text>
+                          <Text numberOfLines={2} style={[styles.title, styles.textMedium, { fontSize: 12 }]}>{reminder.items[0].location}</Text>
+                        </TouchableOpacity>
+                      </TouchableWithoutFeedback>
+                    )
+                  }
+                }
+                //if reminder on the period of time has only many tasks overlapped => display number task of reminder on card
+                else {
+                  return (
+                    <TouchableWithoutFeedback key={index} onLayout={this.props.onCardViewLayout}>
+                      <TouchableOpacity onPress={() => this.onPressReminder(reminder)} style={[styles.containerItemInfoJob, { top: marginTop },
+                      { left: marginLeft }, { height: height }]}
+                        key={reminder.items[0].id}>
+                        <Text style={[styles.title, styles.textBold]} numberOfLines={1}>{time}</Text>
+                        <Text style={[styles.title, styles.textMedium]} numberOfLines={1} >{reminder.items.length + ' reminders'}</Text>
+                      </TouchableOpacity>
+                    </TouchableWithoutFeedback>
+                  )
+                }
+              })
+            }
+          </View>
+        </ScrollView>
+
         <Animated.View style={headerStyle}>
-          <Animated.View style={{flex:1, transform: [{ translateY: contentTranslate }]}}>
+          <Animated.View style={{ flex: 1, transform: [{ translateY: contentTranslate }] }}>
             <CalendarList
               onLayout={() => {
                 this.calendar.scrollToDay(this.state.selectedDay.clone(), this.calendarOffset(), false);
@@ -422,7 +535,7 @@ export default class AgendaView extends Component {
         <Animated.View style={weekdaysStyle}>
           {this.props.showWeekNumbers && <Text allowFontScaling={false} style={this.styles.weekday} numberOfLines={1}></Text>}
           {weekDaysNames.map((day, index) => (
-            <Text allowFontScaling={false} key={day+index} style={this.styles.weekday} numberOfLines={1}>{day}</Text>
+            <Text allowFontScaling={false} key={day + index} style={this.styles.weekday} numberOfLines={1}>{day}</Text>
           ))}
         </Animated.View>
         <Animated.ScrollView
@@ -442,9 +555,42 @@ export default class AgendaView extends Component {
             { useNativeDriver: true },
           )}
         >
-          <View style={{height: agendaHeight + KNOB_HEIGHT}} onLayout={this.onScrollPadLayout} />
+          <View style={{ height: agendaHeight + KNOB_HEIGHT }} onLayout={this.onScrollPadLayout} />
         </Animated.ScrollView>
       </View>
     );
   }
 }
+
+const styles = StyleSheet.create({
+  title: {
+    color: '#42535c',
+    fontSize: 14,
+  },
+  textMedium: {
+    marginBottom: 12,
+  },
+  textRegular: {
+    color: '#4a4a4a',
+    fontSize: 12
+  },
+  containerItemInfoJob: {
+    padding: 7,
+    backgroundColor: '#ffffff',
+    shadowOffset: { width: 5, height: 5 },
+    shadowColor: '#000000',
+    shadowRadius: 5,
+    marginRight: 20,
+    borderRadius: 6,
+    right: 0,
+    position: 'absolute',
+    borderColor: '#000000',
+    borderWidth: 0.3,
+    zIndex: 1
+  },
+  cardsContainer: {
+    flex: 1,
+    paddingBottom: TOP_MARGIN_AT_ZERO,
+    overflow: 'visible'
+  }
+});
