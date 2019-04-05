@@ -487,7 +487,7 @@ export default class AgendaView extends Component {
                 else {
                   return (
                     <TouchableWithoutFeedback key={index} onLayout={this.props.onCardViewLayout}>
-                      <TouchableOpacity onPress={() => this.onPressReminder(reminder)} style={[styles.containerItemInfoJob, { top: marginTop },
+                      <TouchableOpacity onPress={() => this.props.onPressReminder(reminder)} style={[styles.containerItemInfoJob, { top: marginTop },
                       { left: marginLeft }, { height: height }]}
                         key={reminder.items[0].id}>
                         <Text style={[styles.title, styles.textBold]} numberOfLines={1}>{time}</Text>
