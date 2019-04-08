@@ -341,6 +341,14 @@ export default class AgendaView extends Component {
           return true
         }
       }
+      if (nextState.scrollY !== this.state.scrollY ||
+        nextState.calendarIsReady !== this.state.calendarIsReady ||
+        nextState.calendarScrollable !== this.state.calendarScrollable ||
+        nextState.firstResevationLoad !== this.state.firstResevationLoad ||
+        nextState.selectedDay !== this.state.selectedDay ||
+        nextState.topDay !== this.state.topDay) {
+        return true
+      }
       return false
     } else {
       return true
@@ -395,7 +403,6 @@ export default class AgendaView extends Component {
 
     const shouldAllowDragging = !this.props.hideKnob && !this.state.calendarScrollable;
     const scrollPadPosition = (shouldAllowDragging ? HEADER_HEIGHT : 0) - KNOB_HEIGHT;
-
     const scrollPadStyle = {
       position: 'absolute',
       width: 80,
@@ -418,7 +425,7 @@ export default class AgendaView extends Component {
     return (
       <View onLayout={this.onLayout} style={[this.props.style, { flex: 1, overflow: 'hidden' }]}>
         <ScrollView
-          style={{ marginTop: 104, backgroundColor: '#f4f4f4', flex: 1, paddingBottom: 101 }}
+          style={{ marginTop: HEADER_HEIGHT, backgroundColor: '#f4f4f4', flex: 1, paddingBottom: 101 }}
           refreshControl={this.props.refreshControl}
           ref={ref => this.listRef = ref}
         >
@@ -505,7 +512,9 @@ export default class AgendaView extends Component {
           <Animated.View style={{ flex: 1, transform: [{ translateY: contentTranslate }] }}>
             <CalendarList
               onLayout={() => {
-                this.calendar.scrollToDay(this.state.selectedDay.clone(), this.calendarOffset(), false);
+                setTimeout(() => {
+                  this.calendar.scrollToDay(this.state.selectedDay.clone(), this.calendarOffset(), false);
+                }, 200)
               }}
               calendarWidth={this.viewWidth}
               theme={this.props.theme}
